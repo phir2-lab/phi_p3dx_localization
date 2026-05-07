@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 
@@ -21,6 +22,7 @@ ament_target_dependencies(localization_node_cpp
   rclcpp
   std_msgs
   geometry_msgs
+  nav_msgs
   tf2
   tf2_geometry_msgs
 )
@@ -30,7 +32,7 @@ install(TARGETS localization_node_cpp
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY launch scripts rviz
+install(DIRECTORY launch scripts config
   DESTINATION share/${PROJECT_NAME}
 )
 

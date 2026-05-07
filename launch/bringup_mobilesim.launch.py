@@ -1,5 +1,6 @@
 """
 Launch principal para simulação 2D com MobileSim.
+Inicia o MobileSim, phi_p3dx_aria, map_server, TF e RViz.
 """
 from os.path import join
 from launch.substitutions import PathJoinSubstitution
@@ -13,8 +14,7 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     pkg_description = get_package_share_directory('phi_p3dx_description')
-    pkg_navigation = get_package_share_directory('phi_p3dx_navigation')
-    pkg_mapping = get_package_share_directory('phi_p3dx_mapping')
+    pkg_localization = get_package_share_directory('phi_p3dx_localization')
 
     port_arg = DeclareLaunchArgument('port', default_value='localhost:8101', description='')
     map_arg = DeclareLaunchArgument('map_name', default_value='obstacles', description='')
@@ -30,7 +30,7 @@ def generate_launch_description():
 
     state_publishers = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            join(pkg_navigation, 'launch', 'includes', 'bringup_state_publishers.launch.py')
+            join(pkg_localization, 'launch', 'includes', 'bringup_state_publishers.launch.py')
         ),
         launch_arguments={
             'robot_namespace': namespace,
@@ -64,18 +64,23 @@ def generate_launch_description():
         ],
     )
 
-    tf_map_odom = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(join(pkg_mapping, "launch", "includes", "bringup_tf_map_odom.launch.py"))
+    # Map Server
+    map_server_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(join(pkg_localization, "launch", "includes", "bringup_map_server.launch.py")),
+        launch_arguments={
+            'map_name': map_name,
+            'use_sim_time': 'false'
+        }.items()
     )
 
-    rviz_config_file = join(pkg_mapping, 'rviz', 'exploration.rviz')
+    rviz_config_file = join(pkg_localization, 'config', 'localization.rviz')
 
     rviz_launch = TimerAction(
         period=4.0,
         actions=[
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
-                    join(pkg_navigation, 'launch', 'includes', 'bringup_rviz.launch.py')
+                    join(pkg_localization, 'launch', 'includes', 'bringup_rviz.launch.py')
                 ),
                 condition=IfCondition(use_rviz),
                 launch_arguments={
@@ -96,6 +101,6 @@ def generate_launch_description():
         state_publishers,
         mobilesim,
         phi_aria_node,
-        tf_map_odom,
+        map_server_launch,
         rviz_launch,
     ])

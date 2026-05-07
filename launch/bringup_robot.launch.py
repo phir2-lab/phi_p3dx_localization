@@ -1,5 +1,6 @@
 """
 Launch principal para controle do robô real Pioneer 3-DX.
+Inicia phi_p3dx_aria, map_server (opcional), TF e RViz.
 """
 from os.path import join
 from launch import LaunchDescription
@@ -11,20 +12,22 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    pkg_navigation = get_package_share_directory('phi_p3dx_navigation')
-    pkg_description = get_package_share_directory('phi_p3dx_description')
-    pkg_mapping = get_package_share_directory('phi_p3dx_mapping')
+    pkg_localization = get_package_share_directory('phi_p3dx_localization')
 
     port_arg = DeclareLaunchArgument('port', default_value='192.168.1.11:10002', description='')
     namespace_arg = DeclareLaunchArgument('robot_namespace', default_value='', description='pioneer3dx')
     use_rviz_arg = DeclareLaunchArgument('use_rviz', default_value='true', description='Abrir RViz2 automaticamente')
+    map_name_arg = DeclareLaunchArgument('map_name', default_value='obstacles', description='Mapa para carregar (vazio para desabilitar)')
+    load_map_arg = DeclareLaunchArgument('load_map', default_value='false', description='Se deve carregar um mapa')
 
     port      = LaunchConfiguration('port')
     namespace = LaunchConfiguration('robot_namespace')
     use_rviz  = LaunchConfiguration('use_rviz')
+    map_name  = LaunchConfiguration('map_name')
+    load_map  = LaunchConfiguration('load_map')
 
     state_publishers = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(join(pkg_navigation, "launch", "includes", "bringup_state_publishers.launch.py")),
+        PythonLaunchDescriptionSource(join(pkg_localization, "launch", "includes", "bringup_state_publishers.launch.py")),
         launch_arguments={
             'robot_namespace': namespace,
             'use_sim_time': 'false'
@@ -47,18 +50,24 @@ def generate_launch_description():
         }]
     )
 
-    tf_map_odom = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(join(pkg_mapping, "launch", "includes", "bringup_tf_map_odom.launch.py"))
+    # Map Server (opcional)
+    map_server_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(join(pkg_localization, "launch", "includes", "bringup_map_server.launch.py")),
+        condition=IfCondition(load_map),
+        launch_arguments={
+            'map_name': map_name,
+            'use_sim_time': 'false'
+        }.items()
     )
 
-    rviz_config_file = join(pkg_mapping, 'rviz', 'exploration.rviz')
+    rviz_config_file = join(pkg_localization, 'config', 'localization.rviz')
     
     rviz_launch = TimerAction(
         period=4.0,
         actions=[
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
-                    join(pkg_navigation, 'launch', 'includes', 'bringup_rviz.launch.py')
+                    join(pkg_localization, 'launch', 'includes', 'bringup_rviz.launch.py')
                 ),
                 condition=IfCondition(use_rviz),
                 launch_arguments={
@@ -74,9 +83,11 @@ def generate_launch_description():
         port_arg,
         namespace_arg,
         use_rviz_arg,
+        map_name_arg,
+        load_map_arg,
 
         state_publishers,
         phi_aria_node,
-        tf_map_odom,
+        map_server_launch,
         rviz_launch,
     ])
