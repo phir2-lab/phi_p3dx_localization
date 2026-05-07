@@ -75,7 +75,7 @@ void LocalizationExample::update_particles()
   // Incremento de ângulo
   double delta_theta = rotation_speed_ * dt;
 
-  // Atualiza todas as partículas
+  // Rotaciona todas as partículas
   for (auto &p : particles_) {
     p.theta += delta_theta;
     

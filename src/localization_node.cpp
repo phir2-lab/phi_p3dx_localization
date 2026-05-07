@@ -4,27 +4,17 @@
 
 LocalizationNode::LocalizationNode(const std::string &node_name)
   : Node(node_name),
-    num_particles_(100),
+    num_particles_(1000),
     frame_id_("map"),
     rng_(std::random_device{}()),
     normal_dist_(0.0, 1.0)
 {
   // Declarar e obter parâmetros
-  this->declare_parameter<int>("num_particles", 100);
-  this->declare_parameter<double>("initial_x", 0.0);
-  this->declare_parameter<double>("initial_y", 0.0);
-  this->declare_parameter<double>("initial_theta", 0.0);
-  this->declare_parameter<double>("initial_perturbation", 0.1);
-  this->declare_parameter<bool>("use_perturbation", false);
+  this->declare_parameter<int>("num_particles", 1000);
   this->declare_parameter<double>("publish_freq", 10.0);
   this->declare_parameter<std::string>("frame_id", "map");
 
   num_particles_ = this->get_parameter("num_particles").as_int();
-  initial_x_ = this->get_parameter("initial_x").as_double();
-  initial_y_ = this->get_parameter("initial_y").as_double();
-  initial_theta_ = this->get_parameter("initial_theta").as_double();
-  initial_perturbation_ = this->get_parameter("initial_perturbation").as_double();
-  use_perturbation_ = this->get_parameter("use_perturbation").as_bool();
   publish_freq_ = this->get_parameter("publish_freq").as_double();
   frame_id_ = this->get_parameter("frame_id").as_string();
 
@@ -35,6 +25,11 @@ LocalizationNode::LocalizationNode(const std::string &node_name)
   estimated_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
     "estimated_pose", rclcpp::QoS(10));
 
+  // Cria subscriber para o mapa
+  map_sub_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
+    "/map", rclcpp::QoS(10).transient_local(),
+    std::bind(&LocalizationNode::map_callback, this, std::placeholders::_1));
+
   // Timer para publicação (ex: 10 Hz = 0.1 s)
   double timer_period = 1.0 / publish_freq_;
   publish_timer_ = this->create_wall_timer(
@@ -42,42 +37,95 @@ LocalizationNode::LocalizationNode(const std::string &node_name)
     std::bind(&LocalizationNode::on_timer, this));
 
   // Inicializa partículas
-  initialize_particles();
+  initialize_particles(false);
 
   RCLCPP_INFO(this->get_logger(), 
     "[%s] inicializado com %d partículas. Freq: %.1f Hz. Frame: %s",
     node_name.c_str(), num_particles_, publish_freq_, frame_id_.c_str());
 }
 
-void LocalizationNode::initialize_particles()
+void LocalizationNode::initialize_particles(bool full_free_space_generation)
 {
   particles_.clear();
   particles_.resize(num_particles_);
 
   double weight = 1.0 / num_particles_;
 
-  if (use_perturbation_) {
-    // Inicializa com pequena perturbação gaussiana
-    for (int i = 0; i < num_particles_; ++i) {
-      particles_[i].x = initial_x_ + normal_dist_(rng_) * initial_perturbation_;
-      particles_[i].y = initial_y_ + normal_dist_(rng_) * initial_perturbation_;
-      particles_[i].theta = initial_theta_ + normal_dist_(rng_) * initial_perturbation_;
-      particles_[i].weight = weight;
+  if (map_received_ && current_map_) {
+    // Referências locais para facilitar acesso
+    const double resolution = current_map_->info.resolution;
+    const double origin_x = current_map_->info.origin.position.x;
+    const double origin_y = current_map_->info.origin.position.y;
+    const int width = static_cast<int>(current_map_->info.width);
+    const int height = static_cast<int>(current_map_->info.height);
+
+    // Limites do mapa em coordenadas do mundo
+    const double min_x = origin_x;
+    const double min_y = origin_y;
+    const double max_x = origin_x + width * resolution;
+    const double max_y = origin_y + height * resolution;
+
+    // Geradores aleatórios para posição e orientação
+    std::uniform_real_distribution<double> x_dist(min_x, max_x);
+    std::uniform_real_distribution<double> y_dist(min_y, max_y);
+
+    std::uniform_real_distribution<double> x_dist1(min_x, 0);
+    std::uniform_real_distribution<double> y_dist1(min_y, 0);
+    std::uniform_real_distribution<double> x_dist2(0, max_x);
+    std::uniform_real_distribution<double> y_dist2(0, max_y);
+    
+    std::uniform_real_distribution<double> theta_dist(-M_PI, M_PI);
+
+    const int FREE_THRESHOLD = 50;
+
+    double world_x, world_y, theta;
+    int i = 0;
+    while(i < num_particles_) {
+      bool valid = false;
+
+      // Gera pose aleatória
+      if(full_free_space_generation){
+        world_x = x_dist(rng_);
+        world_y = y_dist(rng_);
+        theta = theta_dist(rng_);
+      } else {
+        if(i%2 == 0){
+          world_x = x_dist1(rng_);
+          world_y = y_dist1(rng_);
+        } else {
+          world_x = x_dist2(rng_);
+          world_y = y_dist2(rng_);
+        }
+        theta = 0;
+      }
+
+      // Converte para coordenadas de célula
+      int col = static_cast<int>(std::floor((world_x - origin_x) / resolution));
+      int row = static_cast<int>(std::floor((world_y - origin_y) / resolution));
+
+      // Verifica no mapa se a célula é livre
+      if (col >=0  && col < width && row >= 0 && row < height) {
+        int idx = row * width + col;
+        if (idx >= 0 && idx < static_cast<int>(current_map_->data.size())) {
+          int8_t cell_value = current_map_->data[idx];
+          if (cell_value >= 0 && cell_value < FREE_THRESHOLD) {
+            valid = true;
+          }
+        }
+      }
+
+      if(valid){
+        // Adiciona partícula no conjunto
+        particles_[i].x = world_x;
+        particles_[i].y = world_y;
+        particles_[i].theta = theta;
+        particles_[i].weight = weight;
+        i++;
+      }
     }
-    RCLCPP_INFO(this->get_logger(), 
-      "Partículas inicializadas com perturbação gaussiana (σ=%.3f)", 
-      initial_perturbation_);
-  } else {
-    // Todas na mesma pose
-    for (int i = 0; i < num_particles_; ++i) {
-      particles_[i].x = initial_x_;
-      particles_[i].y = initial_y_;
-      particles_[i].theta = initial_theta_;
-      particles_[i].weight = weight;
-    }
-    RCLCPP_INFO(this->get_logger(), 
-      "Partículas inicializadas na mesma pose: (%.2f, %.2f, %.2f)", 
-      initial_x_, initial_y_, initial_theta_);
+
+    RCLCPP_INFO(this->get_logger(),
+      "Partículas inicializadas no mapa (%dx%d)", width, height);
   }
 }
 
@@ -97,19 +145,13 @@ void LocalizationNode::calculate_mean_pose(double &mean_x, double &mean_y, doubl
   double sum_cos = 0.0;
 
   for (const auto &p : particles_) {
-    mean_x += p.x;
-    mean_y += p.y;
-    sum_sin += std::sin(p.theta);
-    sum_cos += std::cos(p.theta);
+    mean_x += p.weight*p.x;
+    mean_y += p.weight*p.y;
+    sum_sin += p.weight * std::sin(p.theta);
+    sum_cos += p.weight * std::cos(p.theta);
   }
-
-  mean_x /= particles_.size();
-  mean_y /= particles_.size();
-
   // Média circular para theta
-  double mean_sin = sum_sin / particles_.size();
-  double mean_cos = sum_cos / particles_.size();
-  mean_theta = std::atan2(mean_sin, mean_cos);
+  mean_theta = std::atan2(sum_sin, sum_cos);
 }
 
 std::array<double, 36> LocalizationNode::calculate_covariance(
@@ -122,10 +164,16 @@ std::array<double, 36> LocalizationNode::calculate_covariance(
     return cov;
   }
 
-  // Variância de X (índice [0,0])
-  double var_x = 0.0;
-  double var_y = 0.0;
-  double var_theta = 0.0;
+  // Variâncias
+  double var_xx = 0.0;
+  double var_xy = 0.0;
+  double var_xtheta = 0.0;
+  double var_yy = 0.0;
+  double var_yx = 0.0;
+  double var_ytheta = 0.0;
+  double var_thetax = 0.0;
+  double var_thetay = 0.0;
+  double var_thetatheta = 0.0;
 
   for (const auto &p : particles_) {
     double dx = p.x - mean_x;
@@ -137,19 +185,28 @@ std::array<double, 36> LocalizationNode::calculate_covariance(
     while (dtheta > M_PI) dtheta -= 2.0 * M_PI;
     while (dtheta < -M_PI) dtheta += 2.0 * M_PI;
 
-    var_x += dx * dx;
-    var_y += dy * dy;
-    var_theta += dtheta * dtheta;
+    // Computar variâncias e covariâncias para a partícula
+    var_xx += p.weight * dx * dx;
+    var_xy += p.weight * dx * dy;
+    var_xtheta += p.weight * dx * dtheta;
+    var_yy += p.weight * dy * dy;
+    var_yx += p.weight * dy * dx;
+    var_ytheta += p.weight * dy * dtheta;
+    var_thetax += p.weight * dtheta * dx;
+    var_thetay += p.weight * dtheta * dy;
+    var_thetatheta += p.weight * dtheta * dtheta;
   }
 
-  var_x /= particles_.size();
-  var_y /= particles_.size();
-  var_theta /= particles_.size();
-
   // Preencher matriz 6x6 (apenas diagonais principais)
-  cov[0] = var_x;      // (0,0) - variância de X
-  cov[7] = var_y;      // (1,1) - variância de Y
-  cov[35] = var_theta; // (5,5) - variância de theta
+  cov[0] = var_xx;           // (0,0) - variância de X
+  cov[1] = var_xy;           // (0,1) - covariância XY
+  cov[5] = var_xtheta;       // (0,5) - covariância X-theta
+  cov[6] = var_yx;           // (1,0) - covariância YX (igual a XY)
+  cov[7] = var_yy;           // (1,1) - variância de Y
+  cov[11] = var_ytheta;      // (1,5) - covariância Y-theta
+  cov[30] = var_thetax;      // (5,0) - covariância theta-X (igual a X-theta)
+  cov[31] = var_thetay;      // (5,1) - covariância theta-Y (igual a Y-theta)
+  cov[35] = var_thetatheta;  // (5,5) - variância de theta
 
   return cov;
 }
@@ -219,4 +276,17 @@ void LocalizationNode::on_timer()
   // Publica partículas e pose estimada
   publish_particles();
   publish_estimated_pose();
+}
+
+void LocalizationNode::map_callback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg)
+{
+  current_map_ = msg;
+  map_received_ = true;
+  
+  // Reinicializa partículas agora que temos o mapa
+  initialize_particles();
+  
+  RCLCPP_INFO(this->get_logger(), 
+    "Mapa recebido: %u x %u, resolução: %.3f m", 
+    msg->info.width, msg->info.height, msg->info.resolution);
 }

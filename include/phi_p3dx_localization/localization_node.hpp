@@ -4,6 +4,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
+#include <nav_msgs/msg/occupancy_grid.hpp>
 #include <std_msgs/msg/float32.hpp>
 #include <vector>
 #include <string>
@@ -33,15 +34,15 @@ struct Particle
  * 
  * Este é um código didático base para que alunos implementem o MCL completo.
  * 
+ * **Tópicos subscritos:**
+ * - `/map` (nav_msgs/msg/OccupancyGrid): Mapa de ocupância para inicializar partículas
+ * 
  * **Tópicos publicados:**
  * - `/particles` (geometry_msgs/msg/PoseArray): Visualização das partículas
  * - `/estimated_pose` (geometry_msgs/msg/PoseWithCovarianceStamped): Pose estimada com covariância
  * 
  * **Parâmetros:**
  * - `num_particles` (int): Número de partículas (default: 100)
- * - `initial_x`, `initial_y`, `initial_theta` (double): Pose inicial (defaults: 0.0)
- * - `initial_perturbation` (double): Desvio padrão da perturbação gaussiana inicial (default: 0.1)
- * - `use_perturbation` (bool): Se true, usa perturbação gaussiana na inicialização (default: false)
  * - `publish_freq` (double): Frequência de publicação em Hz (default: 10.0)
  */
 class LocalizationNode : public rclcpp::Node
@@ -56,34 +57,51 @@ public:
   virtual ~LocalizationNode() = default;
 
 protected:
-  // ============= Publishers =============
+  //  Publishers 
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr particles_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr estimated_pose_pub_;
 
-  // ============= Timer =============
+  // Subscribers
+  rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;
+
+  // Timer para publicação periódica
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
-  // ============= Estado Interno =============
+  // Estado Interno
   std::vector<Particle> particles_;
   int num_particles_;
   std::string frame_id_;
 
-  // ============= Geradores de números aleatórios =============
+  // Mapa atual
+  nav_msgs::msg::OccupancyGrid::SharedPtr current_map_;
+  bool map_received_ = false;
+
+  // Geradores de números aleatórios
   std::mt19937 rng_;
   std::normal_distribution<double> normal_dist_;
 
-  // ============= Métodos principais =============
+  // Métodos principais
 
   /**
    * @brief Inicializa o conjunto de partículas.
    * 
-   * Se `use_perturbation_` é false, todas as partículas são inicializadas
-   * na mesma pose (initial_x, initial_y, initial_theta).
+   * Se um mapa foi recebido e `full_free_space_generation` é true, 
+   * inicializa as partículas uniformemente
+   * em todas as células livres do mapa.
    * 
-   * Se `use_perturbation_` é true, aplica pequeno ruído gaussiano
-   * baseado no parâmetro `initial_perturbation`.
+   * Caso contrário, inicializa em duas seções do mapa com orientação zero.
    */
-  void initialize_particles();
+  void initialize_particles(bool full_free_space_generation=true);
+
+  /**
+   * @brief Callback para receber atualização do mapa.
+   * 
+   * Processa o mapa recebido e marca que o mapa está disponível para
+   * inicialização de partículas por tentativa de geração aleatória.
+   * 
+   * @param msg Mensagem OccupancyGrid recebida
+   */
+  void map_callback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg);
 
   /**
    * @brief Calcula a pose estimada como a média das partículas.
@@ -145,11 +163,6 @@ protected:
 
 private:
   // Parâmetros
-  double initial_x_;
-  double initial_y_;
-  double initial_theta_;
-  double initial_perturbation_;
-  bool use_perturbation_;
   double publish_freq_;
 };
 
