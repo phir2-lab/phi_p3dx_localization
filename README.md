@@ -27,13 +27,13 @@ The `phi_p3dx_localization` package provides:
 
 1. **Clone the repository** into your ROS2 workspace:
    ```bash
-   cd ~/ROS2_WORKSPACES/robotica_2026_ws/src
+   cd ~/ros2_ws/src
    git clone https://github.com/phir2-lab/phi_p3dx_localization.git
    ```
 
 2. **Build the package**:
    ```bash
-   cd ~/ROS2_WORKSPACES/robotica_2026_ws
+   cd ~/ros2_ws
    colcon build --packages-select phi_p3dx_localization
    source install/setup.bash
    ```
