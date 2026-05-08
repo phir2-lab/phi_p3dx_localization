@@ -32,6 +32,20 @@ LocalizationNode::LocalizationNode(const std::string &node_name)
     "/map", rclcpp::QoS(10).transient_local(),
     std::bind(&LocalizationNode::map_callback, this, std::placeholders::_1));
 
+  // Cria subscribers para scan e odometria
+  scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
+    "laser_scan", rclcpp::SensorDataQoS(),
+    std::bind(&LocalizationNode::scan_callback, this, std::placeholders::_1));
+
+  odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+    "odom", rclcpp::QoS(10),
+    std::bind(&LocalizationNode::odom_callback, this, std::placeholders::_1));
+
+  // Inicializa u_t
+  u_t.rot1 = 0.0;
+  u_t.trans = 0.0;
+  u_t.rot2 = 0.0;
+
   // Timer para publicação (ex: 10 Hz = 0.1 s)
   double timer_period = 1.0 / publish_freq_;
   publish_timer_ = this->create_wall_timer(
@@ -276,8 +290,70 @@ void LocalizationNode::publish_estimated_pose()
   estimated_pose_pub_->publish(*msg);
 }
 
+void LocalizationNode::scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg)
+{
+  z_t = msg;
+}
+
+void LocalizationNode::odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
+{
+  current_odom_ = msg;
+  if (!first_odom_received_) {
+    last_odom_used_ = msg;
+    first_odom_received_ = true;
+  }
+}
+
+double LocalizationNode::get_yaw_from_quaternion(const geometry_msgs::msg::Quaternion & q) const
+{
+  double siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
+  double cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
+  return std::atan2(siny_cosp, cosy_cosp);
+}
+
 void LocalizationNode::on_timer()
 {
+  // Calcular deslocamento u_t baseado na odometria
+  if (first_odom_received_ && current_odom_ && last_odom_used_) {
+    double last_x = last_odom_used_->pose.pose.position.x;
+    double last_y = last_odom_used_->pose.pose.position.y;
+    double last_yaw = get_yaw_from_quaternion(last_odom_used_->pose.pose.orientation);
+
+    double curr_x = current_odom_->pose.pose.position.x;
+    double curr_y = current_odom_->pose.pose.position.y;
+    double curr_yaw = get_yaw_from_quaternion(current_odom_->pose.pose.orientation);
+
+    double dx = curr_x - last_x;
+    double dy = curr_y - last_y;
+
+    double delta_yaw = curr_yaw - last_yaw;
+    while (delta_yaw > M_PI) delta_yaw -= 2.0 * M_PI;
+    while (delta_yaw < -M_PI) delta_yaw += 2.0 * M_PI;
+
+    double trans = std::hypot(dx, dy);
+    double rot1 = 0.0;
+    
+    if (trans > 1e-6) {
+      rot1 = std::atan2(dy, dx) - last_yaw;
+      while (rot1 > M_PI) rot1 -= 2.0 * M_PI;
+      while (rot1 < -M_PI) rot1 += 2.0 * M_PI;
+    }
+    
+    double rot2 = delta_yaw - rot1;
+    while (rot2 > M_PI) rot2 -= 2.0 * M_PI;
+    while (rot2 < -M_PI) rot2 += 2.0 * M_PI;
+
+    u_t.rot1 = rot1;
+    u_t.trans = trans;
+    u_t.rot2 = rot2;
+
+    last_odom_used_ = current_odom_;
+  } else {
+    u_t.rot1 = 0.0;
+    u_t.trans = 0.0;
+    u_t.rot2 = 0.0;
+  }
+
   // Permite que subclasses implementem atualização de partículas
   update_particles();
 

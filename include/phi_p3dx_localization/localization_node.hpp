@@ -5,7 +5,10 @@
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+#include <sensor_msgs/msg/laser_scan.hpp>
 #include <std_msgs/msg/float32.hpp>
+#include <array>
 #include <vector>
 #include <string>
 #include <cmath>
@@ -23,6 +26,15 @@ struct Particle
   double y;       ///< Posição Y no frame "map"
   double theta;   ///< Orientação (radianos)
   double weight;  ///< Peso da partícula (inicialmente 1.0 / num_particles)
+};
+
+/**
+ * @brief Modelo de odometria do Probabilistic Robotics.
+ */
+struct OdometryMotion {
+  double rot1;
+  double trans;
+  double rot2;
 };
 
 /**
@@ -63,6 +75,17 @@ protected:
 
   // Subscribers
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+
+  // Variáveis de entrada da localização
+  sensor_msgs::msg::LaserScan::SharedPtr z_t;
+  OdometryMotion u_t; ///< Componentes de odometria rot1, trans, rot2 (Probabilistic Robotics)
+
+  // Estado Interno de Odometria
+  nav_msgs::msg::Odometry::SharedPtr current_odom_;
+  nav_msgs::msg::Odometry::SharedPtr last_odom_used_;
+  bool first_odom_received_ = false;
 
   // Timer para publicação periódica
   rclcpp::TimerBase::SharedPtr publish_timer_;
@@ -145,6 +168,17 @@ protected:
    * Calcula média, covariância e publica em `/estimated_pose`.
    */
   void publish_estimated_pose();
+
+  /**
+   * @brief Callbacks para sensor laser e odometria
+   */
+  void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg);
+  void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
+
+  /**
+   * @brief Função auxiliar para extrair yaw de quaternion
+   */
+  double get_yaw_from_quaternion(const geometry_msgs::msg::Quaternion & q) const;
 
   /**
    * @brief Loop principal executado pelo timer.
