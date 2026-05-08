@@ -54,7 +54,7 @@ The `phi_p3dx_localization` package provides:
 
    Or in Python:
    ```bash
-   ros2 run phi_p3dx_localization localization_example.py
+   ros2 run phi_p3dx_localization localization_example_py
    ```
 
 3. In RViz:
