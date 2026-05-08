@@ -1,145 +1,86 @@
 # phi_p3dx_localization
 
-Pacote didático de **localização** para o robô Pioneer 3-DX usando **filtro de partículas (MCL)**.
+This repository contains ROS2 packages for localization with the Pioneer P3-DX robot using particle filter (MCL - Monte Carlo Localization) in different environments: Gazebo simulation (3D), MobileSim (2D), and physical robot.
 
-## Objetivo
+## Overview
 
-Fornecer uma base educacional para implementação de localização Monte Carlo Localization (MCL) em robôs móveis. O código atual implementa a estrutura básica (partículas, publicação, cálculo de média e covariância) sem os componentes avançados do MCL completo (atualização com sensores, reamostragem, modelo de movimento).
+The `phi_p3dx_localization` package provides:
+- **Localization nodes**: Particle filter implementation for robot pose estimation.
+- **Multi-platform compatibility**: Works in Gazebo, MobileSim, and physical robots.
+- **Educational examples**: Commented code in Python and C++ for robotics students.
 
-## O que está implementado
+### Package Structure
+- `scripts/`: Python scripts (e.g., `localization_example.py`).
+- `src/`: C++ code (e.g., `localization_example.cpp`, `localization_node.cpp`).
+- `include/`: C++ headers (e.g., `localization_node.hpp`).
+- `launch/`: Launch files for different environments.
+- `config/`: Configurations (e.g., RViz).
 
-### LocalizationNode (nó base)
+## Prerequisites
 
-- **Gerenciamento de partículas**: Armazena e inicializa partículas (x, y, theta, weight)
-- **Publicação de tópicos**:
-  - `/particles` (`geometry_msgs/msg/PoseArray`): Visualização das partículas no RViz
-  - `/estimated_pose` (`geometry_msgs/msg/PoseWithCovarianceStamped`): Pose estimada (média das partículas) com covariância
-- **Cálculo de estimativa**:
-  - Média simples de x e y
-  - Média circular para theta (usando `atan2(mean_sin, mean_cos)`)
-  - Covariância simples baseada na dispersão das partículas
-- **Parâmetros ROS**:
-  - `num_particles` (int, default: 100)
-  - `initial_x`, `initial_y`, `initial_theta` (double, defaults: 0.0)
-  - `initial_perturbation` (double, default: 0.1)
-  - `use_perturbation` (bool, default: false)
-  - `publish_freq` (double, default: 10.0 Hz)
-  - `frame_id` (string, default: "map")
+- **ROS2 Humble** (or compatible).
+- **Gazebo** (for 3D simulation).
+- **MobileSim** (for 2D simulation, if available).
+- Dependencies: `rclcpp`, `rclpy`, `geometry_msgs`, `nav_msgs`, `tf2`, `tf2_geometry_msgs`.
 
-### RotationExample (nó didático)
+## Installation
 
-Subclasse de `LocalizationNode` que rotaciona continuamente as partículas para demonstrar:
-- Funcionamento da média de orientação
-- Visualização de como a covariância se comporta durante rotação
-- Exemplo de como estender o nó base
+1. **Clone the repository** into your ROS2 workspace:
+   ```bash
+   cd ~/ROS2_WORKSPACES/robotica_2026_ws/src
+   git clone https://github.com/phir2-lab/phi_p3dx_localization.git
+   ```
 
-**Parâmetro adicional:**
-- `rotation_speed` (double, default: 0.5 rad/s)
+2. **Build the package**:
+   ```bash
+   cd ~/ROS2_WORKSPACES/robotica_2026_ws
+   colcon build --packages-select phi_p3dx_localization
+   source install/setup.bash
+   ```
 
-## Como usar
+## Usage
 
-### 1. Compilar
+### Gazebo Simulation (3D)
 
-```bash
-cd ~/ROS2_WORKSPACES/robotica_2026_ws
-colcon build --packages-select phi_p3dx_localization
-source install/setup.bash
-```
+1. Launch the simulation:
+   ```bash
+   ros2 launch phi_p3dx_localization bringup_gazebo.launch.py map_name:=obstacles
+   ```
 
-### 2. Executar o nó de localização simples
+2. Run the localization node (C++):
+   ```bash
+   ros2 run phi_p3dx_localization localization_example_cpp
+   ```
 
-```bash
-ros2 launch phi_p3dx_localization localization.launch.py
-```
+   Or in Python:
+   ```bash
+   ros2 run phi_p3dx_localization localization_example.py
+   ```
 
-Isso inicia:
-- Nó de localização com 100 partículas estáticas
-- RViz com visualização de partículas e pose estimada
-- Transformação TF estática (map → odom)
+3. In RViz:
+   - View particles visualization in `/particles` topic
+   - Monitor estimated pose in `/estimated_pose` topic
 
-### 3. Executar o exemplo de rotação
+### MobileSim Simulation (2D)
 
-```bash
-ros2 launch phi_p3dx_localization rotation_example.launch.py
-```
+1. Launch the simulation:
+   ```bash
+   ros2 launch phi_p3dx_localization bringup_mobilesim.launch.py map_name:=obstacles
+   ```
 
-Isso inicia:
-- Exemplo com rotação contínua das partículas
-- As partículas giram continuamente; observe como a pose estimada acompanha a rotação
+2. Run the localization node as above.
 
-### 4. Inspecionar tópicos (terminal separado)
+### Real Robot
 
-```bash
-# Ver partículas
-ros2 topic echo /particles
+1. Connect the Pioneer P3-DX robot.
 
-# Ver pose estimada
-ros2 topic echo /estimated_pose
+2. Launch the system:
+   ```bash
+   ros2 launch phi_p3dx_localization bringup_robot.launch.py
+   ```
 
-# Ver frequência de publicação
-ros2 topic hz /particles
-```
+3. Run the localization node.
 
-## Estrutura do código
+## License
 
-```
-include/phi_p3dx_localization/
-├── localization_node.hpp       # Classe base do nó de localização
-└── rotation_example.hpp        # Exemplo didático
-
-src/
-├── localization_node.cpp       # Implementação do LocalizationNode
-├── localization_main.cpp       # Ponto de entrada do nó de localização
-├── rotation_example.cpp        # Implementação do RotationExample
-└── rotation_example_main.cpp   # Ponto de entrada do exemplo
-
-launch/
-├── localization.launch.py      # Launch file da localização básica
-└── rotation_example.launch.py  # Launch file do exemplo de rotação
-
-rviz/
-└── localization.rviz           # Configuração do RViz
-```
-
-## Para implementar o MCL completo
-
-Os alunos precisarão adicionar:
-
-1. **Callback de sensor de laser** (para atualizar pesos das partículas)
-   - Comparar leitura de laser com mapa conhecido
-   - Atualizar `particle.weight` baseado na probabilidade
-
-2. **Modelo de movimento** (predição)
-   - Atualizar posição das partículas baseado em odometria ou comando de velocidade
-   - Adicionar ruído ao movimento
-
-3. **Reamostragem** (resampling)
-   - Remover partículas com baixo peso
-   - Duplicar partículas com alto peso
-   - Manter número total constante
-
-4. **Integração com ROS**
-   - Subscribe a `/odom` para odometria
-   - Subscribe a `/scan` para laser
-   - Implementar rotinas de atualização no timer existente
-
-## Notas didáticas
-
-- O código utiliza **herança virtual** (`update_particles()`) para permitir fácil extensão
-- A estrutura de dados é simples e didática, **não otimizada** para performance
-- Os comentários em português facilitam compreensão para alunos brasileiros
-- Cada classe tem documentação Doxygen
-
-## Dependências
-
-- ROS 2 (testado em Humble)
-- C++17 ou superior
-- rviz2
-- geometry_msgs
-- tf2_ros
-
-## Referências
-
-- **Filtro de Partículas**: Thrun et al., "Probabilistic Robotics"
-- **ROS 2**: https://docs.ros.org/en/humble/
-- **RViz 2**: https://github.com/ros2/rviz
+This project is distributed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.

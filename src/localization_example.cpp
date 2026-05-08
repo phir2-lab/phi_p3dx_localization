@@ -4,7 +4,7 @@
 
 /**
  * @class LocalizationExample
- * @brief Exemplo didático completo de uso de LocalizationNode.
+ * @brief Exemplo de uso de LocalizationNode.
  * 
  * Demonstra como estender a classe base para implementar comportamento customizado.
  * Neste exemplo, as partículas rotacionam continuamente, permitindo observar:
@@ -18,7 +18,7 @@
  * 
  * **Como usar:**
  * ```bash
- * ros2 run phi_p3dx_localization localization_node
+ * ros2 run phi_p3dx_localization localization_example_cpp --ros-args -p num_particles:=500
  * ```
  */
 class LocalizationExample : public LocalizationNode
@@ -27,69 +27,61 @@ public:
   /**
    * @brief Construtor do exemplo de localização.
    * 
-   * @param node_name Nome do nó no ROS 2 (default: "localization_example")
+   * @param node_name Nome do nó no ROS 2 (default: "localization_example_cpp")
    */
-  explicit LocalizationExample(const std::string &node_name = "localization_example");
+  explicit LocalizationExample(const std::string &node_name = "localization_example_cpp")
+    : LocalizationNode(node_name),
+      rotation_speed_(0.5),
+      last_update_time_(this->now())
+  {
+    // Declarar e obter parâmetro de velocidade de rotação
+    this->declare_parameter<double>("rotation_speed", 0.5);
+    rotation_speed_ = this->get_parameter("rotation_speed").as_double();
+
+    RCLCPP_INFO(this->get_logger(), 
+      "[%s] Exemplo de localização com rotação inicializado.",
+      node_name.c_str());
+    RCLCPP_INFO(this->get_logger(), 
+      "Velocidade de rotação: %.2f rad/s", rotation_speed_);
+  }
+
   virtual ~LocalizationExample() = default;
 
-protected:
-  /**
-   * @brief Atualiza as partículas rotacionando-as continuamente.
-   * 
-   * Exemplo de como estender a classe base com comportamento customizado.
-   * Cada partícula tem sua orientação (theta) incrementada de acordo com
-   * a velocidade de rotação.
-   */
-  void update_particles() override;
-
 private:
-  double rotation_speed_;       ///< Velocidade de rotação em rad/s
-  rclcpp::Time last_update_time_;
-};
+  /**
+   * @brief Sobrescreve o método de atualização de partículas para rotacioná-las.
+   * 
+   * A cada chamada, incrementa o ângulo (theta) de cada partícula com base
+   * na velocidade de rotação e no tempo decorrido desde a última atualização.
+   */
+  void update_particles() override
+  {
+    // Calcula delta de tempo desde a última atualização
+    rclcpp::Time now = this->now();
+    double dt = (now - last_update_time_).seconds();
+    last_update_time_ = now;
 
-// ============ Implementação ============
+    // Incremento de ângulo
+    double delta_theta = rotation_speed_ * dt;
 
-LocalizationExample::LocalizationExample(const std::string &node_name)
-  : LocalizationNode(node_name),
-    rotation_speed_(0.5),
-    last_update_time_(this->now())
-{
-  // Declarar e obter parâmetro de velocidade de rotação
-  this->declare_parameter<double>("rotation_speed", 0.5);
-  rotation_speed_ = this->get_parameter("rotation_speed").as_double();
-
-  RCLCPP_INFO(this->get_logger(), 
-    "[%s] Exemplo de localização com rotação inicializado.",
-    node_name.c_str());
-  RCLCPP_INFO(this->get_logger(), 
-    "Velocidade de rotação: %.2f rad/s", rotation_speed_);
-}
-
-void LocalizationExample::update_particles()
-{
-  // Calcula delta de tempo desde a última atualização
-  rclcpp::Time now = this->now();
-  double dt = (now - last_update_time_).seconds();
-  last_update_time_ = now;
-
-  // Incremento de ângulo
-  double delta_theta = rotation_speed_ * dt;
-
-  // Rotaciona todas as partículas
-  for (auto &p : particles_) {
-    p.theta += delta_theta;
-    
-    // Normaliza theta para [-π, π]
-    while (p.theta > M_PI) {
-      p.theta -= 2.0 * M_PI;
-    }
-    while (p.theta < -M_PI) {
-      p.theta += 2.0 * M_PI;
+    // Rotaciona todas as partículas
+    for (auto &p : particles_) {
+      p.theta += delta_theta;
+      
+      // Normaliza theta para [-π, π]
+      while (p.theta > M_PI) {
+        p.theta -= 2.0 * M_PI;
+      }
+      while (p.theta < -M_PI) {
+        p.theta += 2.0 * M_PI;
+      }
     }
   }
-}
 
-// ============ Main ============
+private:
+  double rotation_speed_;       // Velocidade de rotação em rad/s
+  rclcpp::Time last_update_time_;
+};
 
 int main(int argc, char *argv[])
 {

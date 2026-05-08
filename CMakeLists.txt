@@ -7,6 +7,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -17,8 +18,8 @@ find_package(tf2_geometry_msgs REQUIRED)
 include_directories(include)
 
 # ---------- C++ executable nodes ----------
-add_executable(localization_node_cpp src/localization_example.cpp src/localization_node.cpp)
-ament_target_dependencies(localization_node_cpp
+add_executable(localization_example_cpp src/localization_example.cpp src/localization_node.cpp)
+ament_target_dependencies(localization_example_cpp
   rclcpp
   std_msgs
   geometry_msgs
@@ -27,9 +28,17 @@ ament_target_dependencies(localization_node_cpp
   tf2_geometry_msgs
 )
 
-# ---------- Installation ----------
-install(TARGETS localization_node_cpp
+install(TARGETS localization_example_cpp
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# ---------- Python Node script ----------
+ament_python_install_package(${PROJECT_NAME})
+
+install(PROGRAMS
+  scripts/localization_example.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME localization_example_py
 )
 
 install(DIRECTORY launch scripts config

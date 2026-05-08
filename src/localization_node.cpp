@@ -13,10 +13,12 @@ LocalizationNode::LocalizationNode(const std::string &node_name)
   this->declare_parameter<int>("num_particles", 1000);
   this->declare_parameter<double>("publish_freq", 10.0);
   this->declare_parameter<std::string>("frame_id", "map");
+  this->declare_parameter<bool>("full_space_generation", true);
 
   num_particles_ = this->get_parameter("num_particles").as_int();
   publish_freq_ = this->get_parameter("publish_freq").as_double();
   frame_id_ = this->get_parameter("frame_id").as_string();
+  full_space_generation_ = this->get_parameter("full_space_generation").as_bool();
 
   // Cria publishers
   particles_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>(
@@ -37,14 +39,20 @@ LocalizationNode::LocalizationNode(const std::string &node_name)
     std::bind(&LocalizationNode::on_timer, this));
 
   // Inicializa partículas
-  initialize_particles(false);
+  initialize_particles();
 
-  RCLCPP_INFO(this->get_logger(), 
-    "[%s] inicializado com %d partículas. Freq: %.1f Hz. Frame: %s",
-    node_name.c_str(), num_particles_, publish_freq_, frame_id_.c_str());
+  if(full_space_generation_){
+    RCLCPP_INFO(this->get_logger(), 
+      "[%s] inicializado com %d partículas (geração em todo espaço livre). Freq: %.1f Hz. Frame: %s",
+      node_name.c_str(), num_particles_, publish_freq_, frame_id_.c_str());
+  } else {
+    RCLCPP_INFO(this->get_logger(), 
+      "[%s] inicializado com %d partículas (geração em duas seções). Freq: %.1f Hz. Frame: %s",
+      node_name.c_str(), num_particles_, publish_freq_, frame_id_.c_str());
+  }
 }
 
-void LocalizationNode::initialize_particles(bool full_free_space_generation)
+void LocalizationNode::initialize_particles()
 {
   particles_.clear();
   particles_.resize(num_particles_);
@@ -84,7 +92,7 @@ void LocalizationNode::initialize_particles(bool full_free_space_generation)
       bool valid = false;
 
       // Gera pose aleatória
-      if(full_free_space_generation){
+      if(full_space_generation_){
         world_x = x_dist(rng_);
         world_y = y_dist(rng_);
         theta = theta_dist(rng_);
@@ -197,7 +205,7 @@ std::array<double, 36> LocalizationNode::calculate_covariance(
     var_thetatheta += p.weight * dtheta * dtheta;
   }
 
-  // Preencher matriz 6x6 (apenas diagonais principais)
+  // Preencher matriz 6x6
   cov[0] = var_xx;           // (0,0) - variância de X
   cov[1] = var_xy;           // (0,1) - covariância XY
   cov[5] = var_xtheta;       // (0,5) - covariância X-theta

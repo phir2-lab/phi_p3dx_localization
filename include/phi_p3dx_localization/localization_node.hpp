@@ -71,6 +71,7 @@ protected:
   std::vector<Particle> particles_;
   int num_particles_;
   std::string frame_id_;
+  bool full_space_generation_;  /// Se true, gera partículas uniformemente em todo o espaço livre do mapa
 
   // Mapa atual
   nav_msgs::msg::OccupancyGrid::SharedPtr current_map_;
@@ -85,13 +86,13 @@ protected:
   /**
    * @brief Inicializa o conjunto de partículas.
    * 
-   * Se um mapa foi recebido e `full_free_space_generation` é true, 
+   * Se um mapa foi recebido e `full_space_generation` é true, 
    * inicializa as partículas uniformemente
    * em todas as células livres do mapa.
    * 
    * Caso contrário, inicializa em duas seções do mapa com orientação zero.
    */
-  void initialize_particles(bool full_free_space_generation=true);
+  void initialize_particles();
 
   /**
    * @brief Callback para receber atualização do mapa.
