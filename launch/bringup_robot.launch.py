@@ -13,6 +13,7 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     pkg_localization = get_package_share_directory('phi_p3dx_localization')
+    pkg_navigation = get_package_share_directory('phi_p3dx_navigation')
 
     port_arg = DeclareLaunchArgument('port', default_value='192.168.1.11:10002', description='')
     namespace_arg = DeclareLaunchArgument('robot_namespace', default_value='', description='pioneer3dx')
@@ -27,7 +28,7 @@ def generate_launch_description():
     load_map  = LaunchConfiguration('load_map')
 
     state_publishers = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(join(pkg_localization, "launch", "includes", "bringup_state_publishers.launch.py")),
+        PythonLaunchDescriptionSource(join(pkg_navigation, "launch", "includes", "bringup_state_publishers.launch.py")),
         launch_arguments={
             'robot_namespace': namespace,
             'use_sim_time': 'false'
@@ -67,7 +68,7 @@ def generate_launch_description():
         actions=[
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
-                    join(pkg_localization, 'launch', 'includes', 'bringup_rviz.launch.py')
+                    join(pkg_navigation, 'launch', 'includes', 'bringup_rviz.launch.py')
                 ),
                 condition=IfCondition(use_rviz),
                 launch_arguments={

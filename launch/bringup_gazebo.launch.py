@@ -12,6 +12,7 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     pkg_localization = get_package_share_directory("phi_p3dx_localization")
+    pkg_navigation = get_package_share_directory("phi_p3dx_navigation")
 
     world_name = LaunchConfiguration("world_name")
     map_name = LaunchConfiguration("map_name")
@@ -22,12 +23,12 @@ def generate_launch_description():
     use_rviz = LaunchConfiguration("use_rviz")
 
     world_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(join(pkg_localization, "launch", "includes", "bringup_env.launch.py")),
+        PythonLaunchDescriptionSource(join(pkg_navigation, "launch", "includes", "bringup_env.launch.py")),
         launch_arguments={'world_name': world_name}.items()
     )
 
     robot_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(join(pkg_localization, "launch", "includes", "bringup_spawn_gz.launch.py")),
+        PythonLaunchDescriptionSource(join(pkg_navigation, "launch", "includes", "bringup_spawn_gz.launch.py")),
         launch_arguments={
             'x': x,
             'y': y,
@@ -38,7 +39,7 @@ def generate_launch_description():
     )
 
     state_publishers = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(join(pkg_localization, "launch", "includes", "bringup_state_publishers.launch.py")),
+        PythonLaunchDescriptionSource(join(pkg_navigation, "launch", "includes", "bringup_state_publishers.launch.py")),
         launch_arguments={
             'robot_namespace': namespace,
             'use_sim_time': 'true'
@@ -60,7 +61,7 @@ def generate_launch_description():
         period=3.0,
         actions=[
             IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(join(pkg_localization, "launch", "includes", "bringup_rviz.launch.py")),
+                PythonLaunchDescriptionSource(join(pkg_navigation, "launch", "includes", "bringup_rviz.launch.py")),
                 condition=IfCondition(use_rviz),
                 launch_arguments={
                     'robot_namespace': namespace,
